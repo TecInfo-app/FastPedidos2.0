@@ -1,0 +1,3066 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Entregas - Motoboys (Firebase)</title>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        // Atualizado as versões do Firebase SDK para uma mais recente e estável
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+        // Importa writeBatch aqui
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+        // ====================================================================================
+        // COLOQUE AS CONFIGURAÇÕES DO SEU PROJETO FIREBASE AQUI
+        // Você pode encontrar isso no console do Firebase: Configurações do Projeto -> Suas Apps
+        // Certifique-se de que a autenticação por "E-mail/Senha" e o Firestore estejam habilitados.
+        // ====================================================================================
+        const firebaseConfig = {
+  apiKey: "AIzaSyBPdzYRXPU6Uy8b9UxGD04Jzd6DOz682hk",
+  authDomain: "fastentregas2-90b14.firebaseapp.com",
+  projectId: "fastentregas2-90b14",
+  storageBucket: "fastentregas2-90b14.firebasestorage.app",
+  messagingSenderId: "879178228794",
+  appId: "1:879178228794:web:aa474188b7ecab07fa0103"
+};
+        // ====================================================================================
+        // FIM DAS CONFIGURAÇÕES DO FIREBASE
+        // ====================================================================================
+
+        // VÁRIAVEIS GLOBAIS DO FIREBASE
+        let app;
+        let db;
+        let auth;
+        let userId = null; // Será definido após o login
+
+        // Inicializa o Firebase
+        app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+
+        // Exporta as variáveis para serem usadas no escopo global do script principal
+        window.firebaseApp = app;
+        window.firebaseDb = db;
+        window.firebaseAuth = auth;
+        window.firebaseUserId = userId; // Inicialmente null, será atualizado
+        window.onAuthStateChanged = onAuthStateChanged; // Exporta para o script principal
+        window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+        window.signOut = signOut;
+        window.createUserWithEmailAndPassword = createUserWithEmailAndPassword; // Exporta para o script principal
+        window.getFirestore = getFirestore;
+        window.doc = doc;
+        window.getDoc = getDoc;
+        window.addDoc = addDoc;
+        window.setDoc = setDoc;
+        window.updateDoc = updateDoc;
+        window.deleteDoc = deleteDoc;
+        window.onSnapshot = onSnapshot;
+        window.collection = collection;
+        window.query = query;
+        window.where = where;
+        window.getDocs = getDocs;
+        window.writeBatch = writeBatch; // Exporta writeBatch para o escopo global
+    </script>
+
+    <style>
+        /* Estilos CSS do layout Padrão: Define o visual padrão do aplicativo */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            transition: background-color 0.3s, color 0.3s; /* Transição suave para mudanças de layout */
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        label.required:after {
+            content: " *";
+            color: #e74c3c;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+            transition: border-color 0.3s, background-color 0.3s, color 0.3s;
+        }
+        
+        input:invalid, select:invalid {
+            border-color: #e74c3c;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s, color 0.3s, border 0.3s, box-shadow 0.3s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .success-message {
+            background-color: #2ecc71;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+            display: none;
+        }
+        
+        .error-message {
+            color: #e74c3c;
+            font-size: 14px;
+            margin-top: 5px;
+            display: none;
+        }
+        
+        .motoboy-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .motoboy-block {
+            border: 2px solid #3498db;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative; /* Para posicionar o botão de exclusão */
+        }
+        
+        .motoboy-block:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .motoboy-block.selected {
+            /* Cor azul um pouco mais escura para destaque */
+            background-color: #a7d9f7; /* Um azul mais forte que o anterior */
+            border-color: #2980b9;
+        }
+        
+        .motoboy-block.ifood {
+            border-color: #e74c3c;
+            background-color: #ffebee;
+        }
+        
+        .motoboy-name {
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .motoboy-delete-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 50%; /* Torna o botão redondo */
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1; /* Para centralizar o 'x' */
+            opacity: 0.7;
+            transition: opacity 0.3s;
+        }
+
+        .motoboy-delete-btn:hover {
+            opacity: 1;
+            background-color: #c0392b;
+        }
+        
+        .fee-section {
+            margin-top: 20px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .fee-options {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .fee-option {
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            text-align: center;
+        }
+        
+        .fee-option:hover {
+            background-color: #e9ecef;
+        }
+        
+        .fee-option.selected {
+            background-color: #d4edff;
+            font-weight: bold;
+        }
+        
+        .custom-fee-container {
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .confirm-btn {
+            background-color: #2ecc71;
+        }
+        
+        .confirm-btn:hover {
+            background-color: #27ae60;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap; /* Permite que os botões quebrem a linha em telas menores */
+        }
+        
+        /* Estilos para diminuir os botões na linha de ações */
+        .action-buttons button {
+            flex: 1;
+            padding: 8px 15px; /* Diminuído o padding */
+            font-size: 14px; /* Diminuído o tamanho da fonte */
+        }
+        
+        .clear-btn {
+            background-color: #e74c3c;
+        }
+        
+        .clear-btn:hover {
+            background-color: #c0392b;
+        }
+        
+        .print-btn {
+            background-color: #9b59b6;
+        }
+        
+        .print-btn:hover {
+            background-color: #8e44ad;
+        }
+        
+        .table-container {
+            margin-top: 30px;
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #f2f2f2;
+            font-weight: 600;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .delivery-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+            align-items: center;
+        }
+
+        /* Novo estilo para destacar pedidos na pesquisa */
+        .delivery-item.highlighted-delivery {
+            background-color: #ffeb3b; /* Amarelo vibrante para destaque */
+            border: 2px solid #fbc02d; /* Borda mais escura */
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(255, 235, 59, 0.7);
+            transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        body.layout-dark .delivery-item.highlighted-delivery {
+            background-color: #a38b00; /* Darker yellow for dark mode */
+            border-color: #d4ac00;
+            box-shadow: 0 0 10px rgba(163, 139, 0, 0.7);
+        }
+        body.layout-minimal .delivery-item.highlighted-delivery {
+            background-color: #fffacd; /* Lighter yellow for minimalist mode */
+            border-color: #ffd700;
+            box-shadow: none;
+        }
+        
+        .delivery-order {
+            flex: 2;
+        }
+        
+        .delivery-fee {
+            flex: 1;
+            text-align: right;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .total-row {
+            font-weight: bold;
+            background-color: #fffde7;
+            border-top: 2px solid #333;
+            margin-top: 5px;
+        }
+        
+        .delete-btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 3px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        
+        .delete-btn:hover {
+            background-color: #c0392b;
+        }
+        
+        .motoboy-column {
+            min-width: 200px;
+        }
+        
+        .date-column {
+            width: 100px;
+        }
+        
+        /* Estilos específicos para impressão individual e total */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            .print-area, .print-area * {
+                visibility: visible;
+            }
+            .print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                padding: 20px;
+                font-family: Arial, sans-serif;
+                box-sizing: border-box; /* Include padding in element's total width and height */
+            }
+            .print-header {
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            .print-list {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+            }
+            .print-list-item {
+                display: flex;
+                justify-content: space-between;
+                padding: 5px 0;
+                border-bottom: 1px dashed #ccc;
+                font-size: 14px;
+            }
+            .print-list-item:last-child {
+                border-bottom: none;
+            }
+            .print-total {
+                text-align: right;
+                margin-top: 20px;
+                font-size: 16px;
+                font-weight: bold;
+                padding-top: 10px;
+                border-top: 2px solid #000;
+            }
+            .print-signature {
+                margin-top: 80px;
+                text-align: center;
+            }
+            .print-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+            }
+            .print-table th, .print-table td {
+                border: 1px solid #000;
+                padding: 8px;
+                text-align: left;
+            }
+            .print-table th {
+                background-color: #f2f2f2;
+                font-weight: bold;
+            }
+            .print-table tfoot td {
+                font-weight: bold;
+            }
+            .no-print {
+                display: none;
+            }
+        }
+        
+        .motoboy-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap; /* Allow buttons to wrap */
+        }
+        .motoboy-header .print-btn {
+            margin-left: 5px; /* Space between buttons */
+            margin-top: 5px; /* For wrapping */
+        }
+
+
+        /* Styles for search section */
+        .search-section, .filter-section {
+            margin-top: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f8f8f8;
+        }
+        /* Collapsible header styling */
+        .collapsible-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 15px;
+        }
+        .collapsible-header h2 {
+            margin: 0;
+            color: #2c3e50;
+        }
+        .collapse-icon {
+            font-size: 20px;
+            transition: transform 0.3s ease;
+        }
+        .collapse-icon.rotated {
+            transform: rotate(90deg);
+        }
+        /* Collapsible content styling */
+        .collapsible-content {
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            max-height: 500px; /* Arbitrary large value for expanded state */
+        }
+        .collapsible-content.collapsed {
+            max-height: 0;
+        }
+
+        .search-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px; /* Adjust spacing between input and buttons */
+        }
+
+        .search-buttons button {
+            flex-grow: 1; /* Make buttons expand equally */
+        }
+
+        .search-results {
+            margin-top: 15px;
+            padding: 10px;
+            border: 1px solid #cce5ff;
+            background-color: #e6f7ff;
+            border-radius: 5px;
+            color: #0056b3;
+            font-weight: bold;
+            text-align: center;
+            display: none; /* Hidden by default */
+        }
+        .search-results.not-found {
+            background-color: #ffe6e6;
+            border-color: #ffb3b3;
+            color: #cc0000;
+        }
+
+        .whatsapp-icon {
+            width: 30px; /* Tamanho do ícone */
+            height: 30px;
+            vertical-align: middle;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+
+        /* --- Estilos para o Layout Escuro --- */
+        body.layout-dark {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        body.layout-dark .container {
+            background-color: #2c2c2c;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        body.layout-dark h1, body.layout-dark label {
+            color: #f0f0f0;
+        }
+        body.layout-dark input, body.layout-dark select {
+            background-color: #444;
+            color: #f0f0f0;
+            border-color: #555;
+        }
+        body.layout-dark button {
+            background-color: #555;
+            color: #f0f0f0;
+        }
+        body.layout-dark button:hover {
+            background-color: #666;
+        }
+        body.layout-dark .clear-btn {
+            background-color: #c0392b;
+        }
+        body.layout-dark .clear-btn:hover {
+            background-color: #a02a1d;
+        }
+        body.layout-dark .print-btn {
+            background-color: #7f52a3;
+        }
+        body.layout-dark .print-btn:hover {
+            background-color: #6a448a;
+        }
+        body.layout-dark .export-btn, body.layout-dark .import-btn { /* Specific styles for export/import if needed */
+            background-color: #278d53;
+        }
+        body.layout-dark .export-btn:hover, body.layout-dark .import-btn:hover {
+            background-color: #1f6b40;
+        }
+        body.layout-dark .motoboy-block {
+            border-color: #555;
+            background-color: #3e3e3e;
+            color: #f0f0f0;
+        }
+        body.layout-dark .motoboy-block:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        body.layout-dark .motoboy-block.selected {
+            background-color: #4a4a4a;
+            border-color: #888;
+        }
+        body.layout-dark .motoboy-block.ifood {
+            border-color: #e74c3c; /* mantém a borda vermelha */
+            background-color: #4a302e; /* fundo escuro avermelhado */
+        }
+        body.layout-dark .fee-option {
+            background-color: #3e3e3e;
+        }
+        body.layout-dark .fee-option:hover {
+            background-color: #4a4a4a;
+        }
+        body.layout-dark .fee-option.selected {
+            background-color: #5a5a5a;
+        }
+        body.layout-dark th, body.layout-dark table {
+            background-color: #3a3a3a;
+            border-color: #555;
+        }
+        body.layout-dark th {
+            background-color: #4a4a4a;
+            color: #f0f0f0;
+        }
+        body.layout-dark tr:nth-child(even) {
+            background-color: #333;
+        }
+        body.layout-dark .delivery-item {
+            border-bottom-color: #555;
+        }
+        body.layout-dark .total-row {
+            background-color: #4a4a4a;
+            border-top-color: #888;
+        }
+        body.layout-dark .delete-btn {
+            background-color: #c0392b;
+        }
+        body.layout-dark .delete-btn:hover {
+            background-color: #a02a1d;
+        }
+        body.layout-dark .search-section, body.layout-dark .filter-section {
+            background-color: #3a3a3a;
+            border-color: #555;
+        }
+        body.layout-dark .search-results {
+            background-color: #4a4a4a;
+            border-color: #666;
+            color: #9fe0ff;
+        }
+        body.layout-dark .search-results.not-found {
+            background-color: #6b3e3e;
+            border-color: #a02a1d;
+            color: #ff9999;
+        }
+        body.layout-dark .collapsible-header h2 {
+            color: #f0f0f0;
+        }
+        body.layout-dark .collapsible-header {
+            border-bottom-color: #555;
+        }
+
+        /* --- Estilos para o Layout Minimalista --- */
+        body.layout-minimal {
+            background-color: #ffffff;
+            color: #333;
+        }
+        body.layout-minimal .container {
+            background-color: #ffffff;
+            box-shadow: none;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+        }
+        body.layout-minimal h1, body.layout-minimal label {
+            color: #333;
+        }
+        body.layout-minimal input, body.layout-minimal select {
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            background-color: #fff;
+            color: #333;
+        }
+        body.layout-minimal button {
+            background-color: #f0f0f0;
+            color: #333;
+            border: 1px solid #ccc;
+            box-shadow: none;
+            font-weight: normal;
+        }
+        body.layout-minimal button:hover {
+            background-color: #e0e0e0;
+            box-shadow: none;
+        }
+        body.layout-minimal .clear-btn {
+            background-color: #ffdddd;
+            border-color: #e74c3c;
+            color: #e74c3c;
+        }
+        body.layout-minimal .clear-btn:hover {
+            background-color: #ffcccc;
+        }
+        body.layout-minimal .print-btn {
+            background-color: #e6e6ff;
+            border-color: #9b59b6;
+            color: #9b59b6;
+        }
+        body.layout-minimal .print-btn:hover {
+            background-color: #d9d9ff;
+        }
+        body.layout-minimal .confirm-btn {
+            background-color: #ddffdd;
+            border-color: #2ecc71;
+            color: #2ecc71;
+        }
+        body.layout-minimal .confirm-btn:hover {
+            background-color: #ccffcc;
+        }
+
+        body.layout-minimal .motoboy-block {
+            border: 1px solid #ccc;
+            background-color: #f8f8f8;
+            box-shadow: none;
+            transition: none;
+        }
+        body.layout-minimal .motoboy-block:hover {
+            transform: none;
+            background-color: #e8e8e8;
+            box-shadow: none;
+        }
+        body.layout-minimal .motoboy-block.selected {
+            background-color: #e0eaff;
+            border-color: #6699ff;
+        }
+        body.layout-minimal .motoboy-block.ifood {
+            border-color: #e74c3c;
+            background-color: #ffeeee;
+        }
+        body.layout-minimal .fee-option {
+            background-color: #f0f0f0;
+            border: 1px solid #e0e0e0;
+            border-radius: 3px;
+            transition: none;
+        }
+        body.layout-minimal .fee-option:hover {
+            background-color: #e5e5e5;
+        }
+        body.layout-minimal .fee-option.selected {
+            background-color: #d8f0ff;
+            font-weight: bold;
+        }
+        body.layout-minimal th, body.layout-minimal td {
+            border: 1px solid #e0e0e0;
+        }
+        body.layout-minimal th {
+            background-color: #f5f5f5;
+        }
+        body.layout-minimal tr:nth-child(even) {
+            background-color: #fcfcfc;
+        }
+        body.layout-minimal .delivery-item {
+            border-bottom-color: #e8e8e8;
+        }
+        body.layout-minimal .total-row {
+            background-color: #f0f0f0;
+            border-top: 1px solid #ccc;
+        }
+        body.layout-minimal .delete-btn {
+            background-color: #f2a297;
+            color: #e74c3c;
+            border: 1px solid #e74c3c;
+        }
+        body.layout-minimal .delete-btn:hover {
+            background-color: #e74c3c;
+            color: white;
+        }
+        body.layout-minimal .search-section, body.layout-minimal .filter-section {
+            background-color: #fefefe;
+            border-color: #e0e0e0;
+        }
+        body.layout-minimal .search-results {
+            background-color: #f0f8ff;
+            border-color: #b0dfff;
+            color: #004085;
+        }
+        body.layout-minimal .search-results.not-found {
+            background-color: #fff0f0;
+            border-color: #ffb3b3;
+            color: #cc0000;
+        }
+        body.layout-minimal .collapsible-header h2 {
+            color: #333;
+        }
+        body.layout-minimal .collapsible-header {
+            border-bottom-color: #e0e0e0;
+        }
+
+        /* Botão de mudar layout */
+        .layout-changer-container {
+            text-align: right;
+            margin-bottom: 20px;
+        }
+        .layout-changer-button {
+            padding: 8px 15px;
+            font-size: 14px;
+            background-color: #6c757d;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            border: none;
+            transition: background-color 0.3s;
+        }
+        .layout-changer-button:hover {
+            background-color: #5a6268;
+        }
+
+        /* Estilos para a seção de login: Define como a tela de login aparecerá */
+        .auth-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+        }
+
+        .auth-form {
+            background-color: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .auth-form h2 {
+            margin-bottom: 25px;
+            color: #2c3e50;
+        }
+
+        .auth-form input {
+            margin-bottom: 15px;
+        }
+
+        .auth-form button {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .auth-form .toggle-auth-mode {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #3498db;
+            cursor: pointer;
+        }
+        .auth-form .toggle-auth-mode:hover {
+            text-decoration: underline;
+        }
+
+        /* Estilo para a mensagem de boas-vindas e botão de logout no cabeçalho */
+        .header-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .header-info p {
+            margin: 0;
+            font-weight: 600;
+            color: #34495e;
+        }
+
+        .header-info button {
+            padding: 5px 10px;
+            font-size: 13px;
+            background-color: #e74c3c; /* Cor para o botão de logout */
+        }
+        .header-info button:hover {
+            background-color: #c0392b;
+        }
+        /* Ajustes para o modo escuro */
+        body.layout-dark .header-info p {
+            color: #f0f0f0;
+        }
+        body.layout-dark .header-info {
+            border-bottom-color: #555;
+        }
+
+        /* Estilos para a seleção de loja */
+        .store-selection-grid {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
+        }
+
+        .store-option {
+            display: flex;
+            align-items: center;
+            padding: 10px 15px;
+            border: 2px solid #3498db;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .store-option:hover {
+            background-color: #e3f2fd;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .store-option input[type="radio"] {
+            margin-right: 10px;
+            width: auto; /* Override 100% width */
+        }
+
+        .store-option input[type="radio"]:checked + span {
+            color: #2980b9;
+        }
+
+        /* Dark mode for store selection */
+        body.layout-dark .store-option {
+            border-color: #555;
+            background-color: #3e3e3e;
+            color: #f0f0f0;
+        }
+        body.layout-dark .store-option:hover {
+            background-color: #4a4a4a;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        body.layout-dark .store-option input[type="radio"]:checked + span {
+            color: #9fe0ff;
+        }
+
+        /* Minimalist mode for store selection */
+        body.layout-minimal .store-option {
+            border: 1px solid #ccc;
+            background-color: #f8f8f8;
+            box-shadow: none;
+            transition: none;
+        }
+        body.layout-minimal .store-option:hover {
+            background-color: #e8e8e8;
+        }
+        body.layout-minimal .store-option input[type="radio"]:checked + span {
+            color: #6699ff;
+        }
+
+        /* Filter section styles */
+        .filter-section {
+            margin-top: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f8f8f8;
+        }
+        body.layout-dark .filter-section {
+            background-color: #3a3a3a;
+            border-color: #555;
+        }
+        body.layout-minimal .filter-section {
+            background-color: #fefefe;
+            border-color: #e0e0e0;
+        }
+
+        /* Modal de Cadastro de Motoboys */
+        #motoboyRegistrationModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #motoboyRegistrationModal > div {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            width: 400px;
+            max-width: 90%;
+            text-align: center;
+        }
+
+        #motoboyRegistrationModal h3 {
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+
+        #motoboyRegistrationModal input {
+            margin-bottom: 15px;
+        }
+
+        #motoboyRegistrationModal .modal-buttons {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+
+        #motoboyRegistrationModal .modal-buttons button {
+            flex: 1;
+            margin: 0 5px;
+        }
+
+        /* Estilos para a lista de motoboys existentes no modal */
+        .existing-motoboy-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px dashed #eee;
+            font-size: 15px;
+            color: #333;
+        }
+        .existing-motoboy-item:last-child {
+            border-bottom: none;
+        }
+        .existing-motoboy-item span {
+            flex-grow: 1;
+            text-align: left;
+            padding-right: 10px;
+        }
+        .existing-motoboy-item .delete-motoboy-btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .existing-motoboy-item .delete-motoboy-btn:hover {
+            background-color: #c0392b;
+        }
+        /* Dark mode for existing motoboy list */
+        body.layout-dark .existing-motoboy-item {
+            color: #e0e0e0;
+            border-bottom-color: #555;
+        }
+        body.layout-dark .existing-motoboy-item .delete-motoboy-btn {
+            background-color: #c0392b;
+        }
+        body.layout-dark .existing-motoboy-item .delete-motoboy-btn:hover {
+            background-color: #a02a1d;
+        }
+        /* Minimalist mode for existing motoboy list */
+        body.layout-minimal .existing-motoboy-item {
+            color: #333;
+            border-bottom-color: #e0e0e0;
+        }
+        body.layout-minimal .existing-motoboy-item .delete-motoboy-btn {
+            background-color: #f2a297;
+            color: #e74c3c;
+            border: 1px solid #e74c3c;
+        }
+        body.layout-minimal .existing-motoboy-item .delete-motoboy-btn:hover {
+            background-color: #e74c3c;
+            color: white;
+        }
+
+        /* Floating Action Menu Styles */
+        .fab-menu-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column-reverse; /* Buttons stack upwards */
+            align-items: flex-end;
+            gap: 10px;
+        }
+
+        .fab-toggle-btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            font-size: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            cursor: pointer;
+            transition: transform 0.3s ease-in-out, background-color 0.3s;
+        }
+
+        .fab-toggle-btn.open {
+            transform: rotate(45deg);
+            background-color: #e74c3c; /* Change color when open */
+        }
+
+        .fab-actions {
+            display: flex;
+            flex-direction: column-reverse; /* Buttons stack upwards */
+            gap: 10px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(20px);
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out, visibility 0.3s;
+        }
+
+        .fab-actions.open {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .fab-actions button {
+            width: 180px; /* Fixed width for menu buttons */
+            padding: 10px 15px;
+            font-size: 14px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: left; /* Align text to left */
+            justify-content: flex-start; /* Align content to left */
+        }
+
+        /* Specific colors for FAB buttons */
+        .fab-actions .clear-btn { background-color: #e74c3c; }
+        .fab-actions .clear-btn:hover { background-color: #c0392b; }
+        .fab-actions .export-btn { background-color: #3cb371; }
+        .fab-actions .export-btn:hover { background-color: #2e8b57; }
+        .fab-actions .import-btn { background-color: #8a2be2; }
+        .fab-actions .import-btn:hover { background-color: #6a1bb2; }
+        .fab-actions .print-btn { background-color: #9b59b6; }
+        .fab-actions .print-btn:hover { background-color: #8e44ad; }
+        .fab-actions .register-motoboy-btn { background-color: #ff9800; }
+        .fab-actions .register-motoboy-btn:hover { background-color: #e68a00; }
+
+        /* Dark mode for FAB menu */
+        body.layout-dark .fab-toggle-btn {
+            background-color: #555;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        body.layout-dark .fab-toggle-btn.open {
+            background-color: #c0392b;
+        }
+        body.layout-dark .fab-actions button {
+            background-color: #444;
+            color: #f0f0f0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        body.layout-dark .fab-actions .clear-btn { background-color: #c0392b; }
+        body.layout-dark .fab-actions .clear-btn:hover { background-color: #a02a1d; }
+        body.layout-dark .fab-actions .export-btn { background-color: #2e8b57; }
+        body.layout-dark .export-btn:hover { background-color: #246e44; }
+        body.layout-dark .import-btn { background-color: #6a1bb2; }
+        body.layout-dark .import-btn:hover { background-color: #4f1488; }
+        body.layout-dark .fab-actions .print-btn { background-color: #8e44ad; }
+        body.layout-dark .fab-actions .print-btn:hover { background-color: #72368c; }
+        body.layout-dark .fab-actions .register-motoboy-btn { background-color: #e68a00; }
+        body.layout-dark .fab-actions .register-motoboy-btn:hover { background-color: #cc7a00; }
+
+        /* Minimalist mode for FAB menu */
+        body.layout-minimal .fab-toggle-btn {
+            background-color: #f0f0f0;
+            color: #333;
+            box-shadow: none;
+            border: 1px solid #ccc;
+        }
+        body.layout-minimal .fab-toggle-btn.open {
+            background-color: #ffdddd;
+            border-color: #e74c3c;
+            color: #e74c3c;
+        }
+        body.layout-minimal .fab-actions button {
+            background-color: #f8f8f8;
+            color: #333;
+            box-shadow: none;
+            border: 1px solid #ccc;
+        }
+        body.layout-minimal .fab-actions button:hover {
+            background-color: #e8e8e8;
+        }
+        body.layout-minimal .fab-actions .clear-btn { background-color: #ffdddd; border-color: #e74c3c; color: #e74c3c; }
+        body.layout-minimal .fab-actions .clear-btn:hover { background-color: #ffcccc; }
+        body.layout-minimal .fab-actions .export-btn { background-color: #ddffdd; border-color: #2ecc71; color: #2ecc71; }
+        body.layout-minimal .fab-actions .export-btn:hover { background-color: #ccffcc; }
+        body.layout-minimal .fab-actions .import-btn { background-color: #e6e6ff; border-color: #8a2be2; color: #8a2be2; }
+        body.layout-minimal .import-btn:hover { background-color: #d9d9ff; }
+        body.layout-minimal .fab-actions .print-btn { background-color: #e6e6ff; border-color: #9b59b6; color: #9b59b6; }
+        body.layout-minimal .fab-actions .print-btn:hover { background-color: #d9d9ff; }
+        body.layout-minimal .fab-actions .register-motoboy-btn { background-color: #fff0d9; border-color: #ff9800; color: #ff9800; }
+        body.layout-minimal .fab-actions .register-motoboy-btn:hover { background-color: #ffe6bf; }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Seção de Autenticação (Login/Registro) -->
+        <div id="authSection" class="auth-section">
+            <!-- Formulário de Login -->
+            <div id="loginForm" class="auth-form">
+                <h2>Login</h2>
+                <div class="form-group">
+                    <label for="loginEmail">E-mail</label>
+                    <input type="email" id="loginEmail" placeholder="seu@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Senha</label>
+                    <input type="password" id="loginPassword" placeholder="Sua senha" required>
+                </div>
+                <button type="button" id="loginBtn">Entrar</button>
+                <div class="error-message" id="loginError" style="margin-top: 15px;"></div>
+                <p class="toggle-auth-mode" id="showRegisterForm">Não tem uma conta? Crie uma aqui.</p>
+            </div>
+
+            <!-- Formulário de Registro (inicialmente oculto) -->
+            <div id="registerForm" class="auth-form" style="display: none;">
+                <h2>Registrar Nova Conta</h2>
+                <div class="form-group">
+                    <label for="registerEmail">E-mail</label>
+                    <input type="email" id="registerEmail" placeholder="seu@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerPassword">Senha</label>
+                    <input type="password" id="registerPassword" placeholder="Crie uma senha" required>
+                </div>
+                <button type="button" id="registerBtn">Registrar</button>
+                <div class="error-message" id="registerError" style="margin-top: 15px;"></div>
+                <p class="toggle-auth-mode" id="showLoginForm">Já tem uma conta? Faça login.</p>
+            </div>
+        </div>
+
+        <!-- Seção Principal do Aplicativo -->
+        <div id="mainAppSection" style="display: none;">
+            <div class="layout-changer-container">
+                <button type="button" id="toggleLayoutBtn" class="layout-changer-button">Mudar Layout</button>
+            </div>
+
+            <!-- Informações do cabeçalho -->
+            <div class="header-info">
+                <p id="welcomeUser"></p>
+                <button type="button" id="logoutBtn">Sair</button>
+            </div>
+
+            <h1>Controle de Entregas - Motoboys</h1>
+            
+            <!-- Mensagens de sucesso ou erro (ocultas por padrão) -->
+            <div class="success-message" id="successMessage">
+                </div>
+            
+            <form id="deliveryForm">
+                <div class="form-group">
+                    <label for="orderNumber" class="required">Número do Pedido</label>
+                    <input type="number" id="orderNumber" required inputmode="numeric" pattern="[0-9]*">
+                    <div class="error-message" id="orderNumberError">Por favor, informe o número do pedido</div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="required">Loja</label>
+                    <div class="store-selection-grid">
+                        <label class="store-option">
+                            <input type="radio" name="store" value="Cia do Chopp" checked>
+                            <span>Cia do Chopp</span>
+                        </label>
+                        <label class="store-option">
+                            <input type="radio" name="store" value="Pizzaria">
+                            <span>Pizzaria</span>
+                        </label>
+                        <label class="store-option">
+                            <input type="radio" name="store" value="Adega">
+                            <span>Adega</span>
+                        </label>
+                    </div>
+                    <div class="error-message" id="storeError">Por favor, selecione uma loja</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="required">Selecione o Entregador</label>
+                    <div class="motoboy-grid" id="motoboyGrid">
+                        <!-- Motoboys serão carregados dinamicamente aqui -->
+                    </div>
+                    <div class="error-message" id="deliveryPersonError">Por favor, selecione um entregador</div>
+                </div>
+                
+                <div class="fee-section" id="feeSection">
+                    <h3>Selecione o valor da taxa para <span id="selectedMotoboyName"></span></h3>
+                    
+                    <div class="fee-options">
+                        <div class="fee-option" data-fee="6">R$ 6,00</div>
+                        <div class="fee-option" data-fee="12">R$ 12,00</div>
+                        <div class="fee-option" data-fee="17">R$ 17,00</div>
+                    </div>
+                    
+                    <div class="custom-fee-container" id="customFeeContainer">
+                        <input type="number" id="customFeeInput" placeholder="Digite o valor da taxa" step="0.01" min="0">
+                        <button type="button" class="confirm-btn" id="confirmCustomFeeBtn">Confirmar Taxa</button>
+                    </div>
+                    
+                    <button type="button" class="fee-option custom" id="customFeeOption">Outro valor</button>
+                    <button type="button" class="fee-option skip" id="skipFeeOption" style="margin-top: 10px; background-color: #95a5a6;">Pular taxa (iFood)</button>
+                    
+                    <div class="error-message" id="deliveryFeeError">Por favor, selecione ou informe o valor da taxa</div>
+                </div>
+            </form>
+
+            <div class="search-section">
+                <div class="collapsible-header" data-target="searchContent">
+                    <h2>Pesquisar Pedido</h2>
+                    <span class="collapse-icon">&#9658;</span> <!-- Triângulo para a direita -->
+                </div>
+                <div id="searchContent" class="collapsible-content collapsed">
+                    <div class="form-group">
+                        <label for="searchOrderInput">Número do Pedido</label>
+                        <input type="text" id="searchOrderInput" placeholder="Digite o número do pedido">
+                    </div>
+                    <div class="search-buttons">
+                        <button type="button" id="searchOrderBtn">Pesquisar</button>
+                        <button type="button" id="clearSearchBtn" class="clear-btn" style="background-color: #6c757d;">Limpar Pesquisa</button>
+                    </div>
+                    <div class="search-results" id="searchResults">
+                        </div>
+                </div>
+            </div>
+
+            <div class="filter-section">
+                <div class="collapsible-header" data-target="filterContent">
+                    <h2>Filtrar por Loja</h2>
+                    <span class="collapse-icon">&#9658;</span> <!-- Triângulo para a direita -->
+                </div>
+                <div id="filterContent" class="collapsible-content collapsed">
+                    <div class="form-group">
+                        <label for="storeFilter">Selecione a Loja</label>
+                        <select id="storeFilter">
+                            <option value="all">Todas as Lojas</option>
+                            <option value="Cia do Chopp">Cia do Chopp</option>
+                            <option value="Pizzaria">Pizzaria</option>
+                            <option value="Adega">Adega</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <h2>Registro de Entregas</h2>
+                <table id="deliveryTable">
+                    <thead>
+                        <tr>
+                            <th class="date-column">Data</th>
+                            <!-- Cabeçalhos dos motoboys serão gerados dinamicamente -->
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para seleção de período de impressão -->
+    <div id="printDateModal" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 400px; max-width: 90%;">
+            <h3 style="text-align: center; margin-bottom: 20px; color: #2c3e50;">Selecione o Período para Impressão</h3>
+            <div class="form-group">
+                <label for="startDateInput">Data de Início (opcional)</label>
+                <input type="date" id="startDateInput">
+            </div>
+            <div class="form-group">
+                <label for="endDateInput">Data de Fim (opcional)</label>
+                <input type="date" id="endDateInput">
+            </div>
+            <div style="display: flex; justify-content: space-around; margin-top: 20px;">
+                <button type="button" id="confirmPrintDateBtn" class="confirm-btn">Imprimir Selecionado</button>
+                <button type="button" id="printAllWithoutDateBtn" class="print-btn" style="background-color: #6c757d;">Imprimir Tudo (Sem Data)</button>
+                <button type="button" id="cancelPrintDateBtn" class="clear-btn" style="background-color: #e74c3c;">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Cadastro de Motoboys -->
+    <div id="motoboyRegistrationModal">
+        <div>
+            <h3 style="text-align: center;">Cadastrar Novo Entregador</h3>
+            <div class="form-group">
+                <label for="motoboyNameInput" class="required">Nome do Entregador</label>
+                <input type="text" id="motoboyNameInput" placeholder="Nome Completo" required>
+                <div class="error-message" id="motoboyNameError"></div>
+            </div>
+            <div class="form-group">
+                <label for="motoboyWhatsappInput">WhatsApp (apenas números)</label>
+                <input type="number" id="motoboyWhatsappInput" placeholder="Ex: 5581999999999">
+                <div class="error-message" id="motoboyWhatsappError"></div>
+            </div>
+            <div class="modal-buttons">
+                <button type="button" id="saveMotoboyBtn" class="confirm-btn">Salvar Entregador</button>
+                <button type="button" id="cancelMotoboyRegistrationBtn" class="clear-btn">Cancelar</button>
+            </div>
+
+            <hr style="margin: 30px 0; border-top: 1px solid #eee;">
+
+            <h3 style="text-align: center;">Entregadores Cadastrados</h3>
+            <div id="existingMotoboysList" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
+                <!-- Existing motoboys will be listed here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Message Box -->
+    <div id="customMessageBox" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 350px; max-width: 90%; text-align: center;">
+            <p id="messageBoxText" style="margin-bottom: 20px; font-size: 16px; color: #333;"></p>
+            <div id="messageBoxButtons" style="display: flex; justify-content: center; gap: 10px;">
+                <!-- Buttons will be appended here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Input de arquivo oculto para importação de dados -->
+    <input type="file" id="importFileInput" style="display: none;" accept=".json">
+
+    <!-- Floating Action Menu -->
+    <div class="fab-menu-container">
+        <button type="button" id="fabToggleBtn" class="fab-toggle-btn">+</button>
+        <div id="fabActions" class="fab-actions">
+            <button type="button" id="clearAllBtn" class="clear-btn">Limpar Tudo</button>
+            <button type="button" id="exportDataBtn" class="export-btn">Exportar Dados</button>
+            <button type="button" id="importDataBtn" class="import-btn">Importar Dados</button>
+            <button type="button" id="printAllBtn" class="print-btn">Imprimir Tudo</button>
+            <button type="button" id="registerMotoboyBtnFab" class="register-motoboy-btn">Cadastro de Entregadores</button>
+        </div>
+    </div>
+
+    <!-- Script principal do aplicativo (Colocado no final do body para garantir que o DOM esteja pronto) -->
+    <script>
+        // Variáveis globais para dados do aplicativo
+        let deliveries = []; // Armazena os dados de entregas
+        let registeredMotoboys = []; // Armazena os motoboys cadastrados
+        let currentMotoboy = null; 
+        let currentFee = null;    
+        let currentStore = "Cia do Chopp"; 
+
+        // Mapeamento de nomes de motoboys para números de WhatsApp (será preenchido dinamicamente)
+        let WHATSAPP_NUMBERS = {};
+
+        // Variáveis Firebase (acessadas via window.firebase...)
+        let app, db, auth, userId;
+        let unsubscribeDeliveries = null; // Para desinscrever listeners do Firestore
+        let unsubscribeMotoboys = null; // Para desinscrever listeners do Firestore
+
+        // Adiciona a variável appId para garantir que __app_id seja definida
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // ====================================================================================
+        // FUNÇÕES DE UTILIDADE
+        // ====================================================================================
+
+        // Função para exibir mensagens customizadas (alert ou confirm)
+        function showCustomMessageBox(message, type, callback) {
+            const messageBox = document.getElementById('customMessageBox');
+            const messageBoxText = document.getElementById('messageBoxText');
+            const messageBoxButtons = document.getElementById('messageBoxButtons');
+
+            messageBoxText.textContent = message;
+            messageBoxButtons.innerHTML = ''; // Limpa botões anteriores
+
+            if (type === 'alert') {
+                const okBtn = document.createElement('button');
+                okBtn.textContent = 'OK';
+                okBtn.style.cssText = 'background-color: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; margin-top: 10px;';
+                okBtn.addEventListener('click', () => {
+                    messageBox.style.display = 'none';
+                    if (callback) callback(true);
+                });
+                messageBoxButtons.appendChild(okBtn);
+            } else if (type === 'confirm') {
+                const confirmBtn = document.createElement('button');
+                confirmBtn.textContent = 'Confirmar';
+                confirmBtn.style.cssText = 'background-color: #2ecc71; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; margin-right: 10px;';
+                confirmBtn.addEventListener('click', () => {
+                    messageBox.style.display = 'none';
+                    if (callback) callback(true);
+                });
+                messageBoxButtons.appendChild(confirmBtn);
+
+                const cancelBtn = document.createElement('button');
+                cancelBtn.textContent = 'Cancelar';
+                cancelBtn.style.cssText = 'background-color: #e74c3c; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 14px;';
+                cancelBtn.addEventListener('click', () => {
+                    messageBox.style.display = 'none';
+                    if (callback) callback(false);
+                });
+                messageBoxButtons.appendChild(cancelBtn);
+            }
+
+            messageBox.style.display = 'flex';
+        }
+
+        // Função para exibir mensagens de sucesso
+        function showSuccessMessage(message) {
+            const successMessage = document.getElementById('successMessage');
+            if (!successMessage) return; 
+            successMessage.textContent = message;
+            successMessage.style.display = 'block';
+            setTimeout(() => {
+                successMessage.style.display = 'none';
+            }, 3000); 
+        }
+        
+        // Função para exibir mensagens de erro para inputs
+        function displayError(elementId, message) {
+            const errorElement = document.getElementById(elementId);
+            if (!errorElement) return; 
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+        
+        // Função para ocultar todas as mensagens de erro
+        function hideAllErrors() {
+            document.querySelectorAll('.error-message').forEach(error => {
+                error.style.display = 'none';
+            });
+            document.getElementById('loginError').style.display = 'none';
+            document.getElementById('registerError').style.display = 'none';
+        }
+
+        // ====================================================================================
+        // FUNÇÕES DE AUTENTICAÇÃO FIREBASE
+        // ====================================================================================
+
+        async function loginUser(email, password) {
+            hideAllErrors();
+            try {
+                const userCredential = await window.signInWithEmailAndPassword(auth, email, password);
+                // User is signed in. onAuthStateChanged will handle UI update.
+            } catch (error) {
+                let errorMessage = "Erro ao fazer login. Verifique seu e-mail e senha.";
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                    errorMessage = "E-mail ou senha inválidos.";
+                } else if (error.code === 'auth/invalid-email') {
+                    errorMessage = "Formato de e-mail inválido.";
+                }
+                displayError('loginError', errorMessage);
+                console.error("Erro de login:", error);
+            }
+        }
+
+        async function registerUser(email, password) {
+            hideAllErrors();
+            try {
+                const userCredential = await window.createUserWithEmailAndPassword(auth, email, password);
+                showSuccessMessage("Conta criada com sucesso! Você foi logado automaticamente.");
+                // User is signed in. onAuthStateChanged will handle UI update.
+            } catch (error) {
+                let errorMessage = "Erro ao criar conta.";
+                if (error.code === 'auth/email-already-in-use') {
+                    errorMessage = "Este e-mail já está em uso.";
+                } else if (error.code === 'auth/weak-password') {
+                    errorMessage = "A senha deve ter pelo menos 6 caracteres.";
+                } else if (error.code === 'auth/invalid-email') {
+                    errorMessage = "Formato de e-mail inválido.";
+                }
+                displayError('registerError', errorMessage);
+                console.error("Erro de registro:", error);
+            }
+        }
+
+        async function logoutUser() {
+            try {
+                await window.signOut(auth);
+                // User is signed out. onAuthStateChanged will handle UI update.
+            } catch (error) {
+                console.error("Erro ao fazer logout:", error);
+                showCustomMessageBox("Erro ao fazer logout. Tente novamente.", 'alert');
+            }
+        }
+
+        // ====================================================================================
+        // FUNÇÕES DE PERSISTÊNCIA DE DADOS (FIRESTORE)
+        // ====================================================================================
+
+        // Listener para entregas
+        function setupDeliveriesListener() {
+            if (unsubscribeDeliveries) {
+                unsubscribeDeliveries(); // Desinscreve o listener anterior
+            }
+            if (!userId) return;
+
+            const deliveriesColRef = window.collection(db, `artifacts/${appId}/users/${userId}/deliveries`);
+            unsubscribeDeliveries = window.onSnapshot(deliveriesColRef, (snapshot) => {
+                deliveries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                updateTable();
+                updatePrintAndExportButtonState();
+            }, (error) => {
+                console.error("Erro ao carregar entregas em tempo real:", error);
+                showCustomMessageBox("Erro ao carregar entregas. Por favor, recarregue a página.", 'alert');
+            });
+        }
+
+        // Listener para motoboys
+        function setupMotoboysListener() {
+            if (unsubscribeMotoboys) {
+                unsubscribeMotoboys(); // Desinscreve o listener anterior
+            }
+            if (!userId) return;
+
+            const motoboysColRef = window.collection(db, `artifacts/${appId}/users/${userId}/motoboys`);
+            unsubscribeMotoboys = window.onSnapshot(motoboysColRef, (snapshot) => {
+                registeredMotoboys = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                WHATSAPP_NUMBERS = {};
+                registeredMotoboys.forEach(motoboy => {
+                    WHATSAPP_NUMBERS[motoboy.name] = motoboy.whatsapp;
+                });
+                renderMotoboyGrid();
+                renderExistingMotoboysInModal();
+                updateTable(); // Atualiza a tabela para refletir as mudanças nos motoboys
+            }, (error) => {
+                console.error("Erro ao carregar motoboys em tempo real:", error);
+                showCustomMessageBox("Erro ao carregar entregadores. Por favor, recarregue a página.", 'alert');
+            });
+        }
+
+        async function addDelivery(newDelivery) {
+            if (!userId) {
+                showCustomMessageBox("Você precisa estar logado para adicionar entregas.", 'alert');
+                return;
+            }
+            try {
+                const deliveriesColRef = window.collection(db, `artifacts/${appId}/users/${userId}/deliveries`);
+                // Firestore gera o ID automaticamente
+                await window.addDoc(deliveriesColRef, {
+                    date: newDelivery.date,
+                    motoboy: newDelivery.motoboy,
+                    orderNumber: newDelivery.orderNumber,
+                    fee: newDelivery.fee,
+                    store: newDelivery.store
+                });
+                showSuccessMessage(`Pedido cadastrado com sucesso para ${newDelivery.motoboy}!`); 
+                resetForm(); 
+            } catch (error) {
+                console.error("Erro ao adicionar entrega:", error);
+                showCustomMessageBox("Erro ao cadastrar pedido. Tente novamente.", 'alert');
+            }
+        }
+
+        async function deleteDelivery(idToDelete) {
+            if (!userId) {
+                showCustomMessageBox("Você precisa estar logado para remover entregas.", 'alert');
+                return;
+            }
+            showCustomMessageBox('Tem certeza que deseja remover este pedido?', 'confirm', async (result) => {
+                if (result) {
+                    try {
+                        const deliveryDocRef = window.doc(db, `artifacts/${appId}/users/${userId}/deliveries`, idToDelete);
+                        await window.deleteDoc(deliveryDocRef);
+                        showSuccessMessage('Pedido removido com sucesso!');
+                    } catch (error) {
+                        console.error("Erro ao remover entrega:", error);
+                        showCustomMessageBox("Erro ao remover pedido. Tente novamente.", 'alert');
+                    }
+                }
+            });
+        }
+
+        async function addMotoboy(newMotoboy) {
+            if (!userId) {
+                showCustomMessageBox("Você precisa estar logado para adicionar entregadores.", 'alert');
+                return;
+            }
+            try {
+                const motoboysColRef = window.collection(db, `artifacts/${appId}/users/${userId}/motoboys`);
+                // Firestore gera o ID automaticamente
+                await window.addDoc(motoboysColRef, {
+                    name: newMotoboy.name,
+                    whatsapp: newMotoboy.whatsapp
+                });
+                showSuccessMessage(`Entregador ${newMotoboy.name} cadastrado com sucesso!`);
+                document.getElementById('motoboyRegistrationModal').style.display = 'none';
+            } catch (error) {
+                console.error("Erro ao adicionar motoboy:", error);
+                showCustomMessageBox("Erro ao cadastrar entregador. Tente novamente.", 'alert');
+            }
+        }
+
+        async function deleteMotoboy(motoboyId, motoboyName) {
+            if (!userId) {
+                showCustomMessageBox("Você precisa estar logado para excluir entregadores.", 'alert');
+                return;
+            }
+            showCustomMessageBox(`Tem certeza que deseja excluir o entregador ${motoboyName}? Todas as entregas associadas a ele também serão removidas.`, 'confirm', async (result) => {
+                if (result) {
+                    try {
+                        // Excluir motoboy
+                        const motoboyDocRef = window.doc(db, `artifacts/${appId}/users/${userId}/motoboys`, motoboyId);
+                        await window.deleteDoc(motoboyDocRef);
+
+                        // Remover entregas associadas a este motoboy
+                        const deliveriesColRef = window.collection(db, `artifacts/${appId}/users/${userId}/deliveries`);
+                        const q = window.query(deliveriesColRef, window.where("motoboy", "==", motoboyName));
+                        const querySnapshot = await window.getDocs(q);
+                        const batch = window.writeBatch(db); // Usa window.writeBatch(db)
+                        querySnapshot.forEach((doc) => {
+                            batch.delete(doc.ref);
+                        });
+                        await batch.commit();
+
+                        showSuccessMessage(`Entregador ${motoboyName} e suas entregas foram removidos com sucesso!`);
+                    } catch (error) {
+                        console.error("Erro ao excluir motoboy ou entregas:", error);
+                        showCustomMessageBox("Erro ao excluir entregador e suas entregas. Tente novamente.", 'alert');
+                    }
+                }
+            });
+        }
+
+        // ====================================================================================
+        // FUNÇÕES DE UI E LÓGICA DO APP
+        // ====================================================================================
+
+        // Função para atualizar o estado dos botões de impressão/exportação com base na existência de dados
+        function updatePrintAndExportButtonState() {
+            const printAllBtnFab = document.getElementById('printAllBtn');
+            const exportDataBtnFab = document.getElementById('exportDataBtn');
+            const hasDeliveries = deliveries.length > 0;
+            if (printAllBtnFab) printAllBtnFab.disabled = !hasDeliveries;
+            if (exportDataBtnFab) exportDataBtnFab.disabled = !hasDeliveries;
+        }
+
+        // Função para remover todos os destaques de pedidos na tabela
+        function clearAllHighlights() {
+            document.querySelectorAll('.delivery-item.highlighted-delivery').forEach(item => {
+                item.classList.remove('highlighted-delivery');
+            });
+        }
+
+        // Função para atualizar a tabela de registro de entregas na UI
+        function updateTable(filterStore = document.getElementById('storeFilter')?.value || 'all') {
+            const tableBody = document.getElementById('tableBody');
+            if (!tableBody) return; 
+
+            tableBody.innerHTML = ''; 
+            
+            const motoboys = registeredMotoboys.map(m => m.name).sort(); 
+            const tableHeaderRow = document.querySelector('#deliveryTable thead tr'); 
+            tableHeaderRow.innerHTML = '<th class="date-column">Data</th>'; 
+
+            motoboys.forEach(motoboy => {
+                tableHeaderRow.innerHTML += `
+                    <th class="motoboy-column">
+                        <div class="motoboy-header">
+                            <span>${motoboy}</span>
+                            <button class="print-btn" data-motoboy="${motoboy}" data-report-type="individual" style="padding: 3px 6px; font-size: 12px;">Imprimir</button>
+                            <button class="print-btn" data-motoboy="${motoboy}" data-report-type="totals" style="padding: 3px 6px; font-size: 12px; background-color: #1abc9c;">Imprimir Totais</button>
+                        </div>
+                    </th>
+                `;
+            });
+
+            document.querySelectorAll('th .print-btn[data-report-type="individual"]').forEach(button => {
+                button.addEventListener('click', function(event) {
+                    event.stopPropagation(); 
+                    const motoboyToPrint = this.getAttribute('data-motoboy');
+                    printMotoboyReport(motoboyToPrint);
+                });
+            });
+
+            document.querySelectorAll('th .print-btn[data-report-type="totals"]').forEach(button => {
+                button.addEventListener('click', function(event) {
+                    event.stopPropagation();
+                    const motoboyToPrint = this.getAttribute('data-motoboy');
+                    printMotoboyTotalsReport(motoboyToPrint);
+                });
+            });
+
+            const filteredAndSortedDeliveries = deliveries
+                .filter(delivery => {
+                    return filterStore === 'all' || (delivery.store && delivery.store === filterStore);
+                })
+                .sort((a, b) => a.id - b.id); // Ordena pelo ID para manter a ordem de lançamento
+
+            const deliveriesByDate = filteredAndSortedDeliveries.reduce((acc, delivery) => {
+                const dateOnly = delivery.date.split(' ')[1]; 
+                if (!acc[dateOnly]) {
+                    acc[dateOnly] = {};
+                }
+                if (!acc[dateOnly][delivery.motoboy]) {
+                    acc[dateOnly][delivery.motoboy] = [];
+                }
+                acc[dateOnly][delivery.motoboy].push(delivery);
+                return acc;
+            }, {});
+        
+            const sortedDates = Object.keys(deliveriesByDate).sort((a, b) => {
+                const [dayA, monthA, yearA] = a.split('/').map(Number);
+                const [dayB, monthB, yearB] = b.split('/').map(Number);
+                const dateA = new Date(yearA, monthA - 1, dayA);
+                const dateB = new Date(yearB, monthB - 1, dayB);
+                return dateA - dateB; 
+            });
+        
+            sortedDates.forEach(date => {
+                const row = tableBody.insertRow();
+                row.insertCell().textContent = date; 
+        
+                let totalDailyFees = {}; 
+                motoboys.forEach(motoboy => {
+                    totalDailyFees[motoboy] = 0;
+                });
+        
+                motoboys.forEach(motoboy => {
+                    const cell = row.insertCell();
+                    const motoboyDeliveries = (deliveriesByDate[date][motoboy] || []).sort((a,b) => a.id - b.id); // Garante ordenação dentro da célula
+        
+                    motoboyDeliveries.forEach(delivery => {
+                        const deliveryItem = document.createElement('div');
+                        deliveryItem.classList.add('delivery-item');
+                        deliveryItem.setAttribute('data-id', delivery.id); 
+        
+                        const orderSpan = document.createElement('span');
+                        orderSpan.classList.add('delivery-order');
+                        const timeOnly = delivery.date.split(' ')[2]; 
+                        orderSpan.textContent = `Pedido: ${delivery.orderNumber} (${delivery.store}) - ${timeOnly}`; 
+                        deliveryItem.appendChild(orderSpan);
+        
+                        const feeSpan = document.createElement('span');
+                        feeSpan.classList.add('delivery-fee');
+                        feeSpan.textContent = `R$ ${parseFloat(delivery.fee).toFixed(2).replace('.', ',')}`; 
+                        deliveryItem.appendChild(feeSpan);
+        
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.classList.add('delete-btn');
+                        deleteBtn.textContent = 'x';
+                        deleteBtn.addEventListener('click', function() {
+                            deleteDelivery(delivery.id); 
+                        });
+                        deliveryItem.appendChild(deleteBtn);
+        
+                        cell.appendChild(deliveryItem);
+                        totalDailyFees[motoboy] += parseFloat(delivery.fee); 
+                    });
+        
+                    if (motoboyDeliveries.length > 0) {
+                        const totalRow = document.createElement('div');
+                        totalRow.classList.add('total-row');
+                        totalRow.textContent = `Total: R$ ${totalDailyFees[motoboy].toFixed(2).replace('.', ',')}`;
+                        cell.appendChild(totalRow);
+                    }
+                });
+            });
+        }
+
+        // Função para renderizar a grade de motoboys dinamicamente (para seleção)
+        function renderMotoboyGrid() {
+            const motoboyGrid = document.getElementById('motoboyGrid');
+            if (!motoboyGrid) return;
+            motoboyGrid.innerHTML = ''; 
+
+            registeredMotoboys.sort((a,b) => a.name.localeCompare(b.name)).forEach(motoboy => {
+                const motoboyBlock = document.createElement('div');
+                motoboyBlock.classList.add('motoboy-block');
+                if (motoboy.name === 'IFOOD') {
+                    motoboyBlock.classList.add('ifood');
+                }
+                motoboyBlock.setAttribute('data-motoboy', motoboy.name);
+                motoboyBlock.setAttribute('data-motoboy-id', motoboy.id); 
+
+                motoboyBlock.innerHTML = `<div class="motoboy-name">${motoboy.name}</div>`;
+                
+                motoboyGrid.appendChild(motoboyBlock);
+
+                motoboyBlock.addEventListener('click', function() {
+                    document.querySelectorAll('.motoboy-block').forEach(b => {
+                        b.classList.remove('selected');
+                    });
+                    this.classList.add('selected'); 
+                    currentMotoboy = this.getAttribute('data-motoboy'); 
+                    document.getElementById('selectedMotoboyName').textContent = currentMotoboy; 
+                    document.getElementById('feeSection').style.display = 'block'; 
+                    document.querySelectorAll('.fee-option').forEach(opt => opt.classList.remove('selected'));
+                    document.getElementById('customFeeContainer').style.display = 'none';
+                    document.getElementById('customFeeInput').value = '';
+                    currentFee = null;
+                    
+                    if (currentMotoboy === 'IFOOD') {
+                        document.getElementById('skipFeeOption').style.display = 'block';
+                    } else {
+                        document.getElementById('skipFeeOption').style.display = 'none';
+                    }
+                });
+            });
+        }
+
+        // Função para renderizar a lista de motoboys existentes no modal de cadastro
+        function renderExistingMotoboysInModal() {
+            const existingMotoboysList = document.getElementById('existingMotoboysList');
+            if (!existingMotoboysList) return;
+            existingMotoboysList.innerHTML = ''; 
+
+            registeredMotoboys.sort((a,b) => a.name.localeCompare(b.name)).forEach(motoboy => {
+                const motoboyItem = document.createElement('div');
+                motoboyItem.classList.add('existing-motoboy-item');
+                motoboyItem.innerHTML = `<span>${motoboy.name} (${motoboy.whatsapp || 'N/A'})</span>`;
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.classList.add('delete-motoboy-btn');
+                deleteBtn.textContent = 'Excluir';
+                deleteBtn.title = `Excluir ${motoboy.name}`;
+                deleteBtn.addEventListener('click', function() {
+                    deleteMotoboy(motoboy.id, motoboy.name);
+                });
+                motoboyItem.appendChild(deleteBtn);
+                
+                existingMotoboysList.appendChild(motoboyItem);
+            });
+        }
+            
+        // Função para resetar o formulário após adicionar uma entrega
+        function resetForm() {
+            document.getElementById('orderNumber').value = '';
+            document.querySelectorAll('.motoboy-block').forEach(b => b.classList.remove('selected'));
+            document.querySelectorAll('.fee-option').forEach(opt => opt.classList.remove('selected'));
+            document.getElementById('feeSection').style.display = 'none';
+            document.getElementById('customFeeContainer').style.display = 'none';
+            document.getElementById('customFeeInput').value = '';
+            currentMotoboy = null;
+            currentFee = null;
+            hideAllErrors();
+            document.querySelector('input[name="store"][value="Cia do Chopp"]').checked = true;
+            currentStore = "Cia do Chopp"; 
+        }
+
+        // Função para gerar e imprimir um relatório de entregas por motoboy
+        function printMotoboyReport(motoboyName) {
+            const activeStoreFilter = document.getElementById('storeFilter').value; 
+            let reportContent = '';
+            let totalFee = 0;
+            const today = new Date();
+            const currentDateTimeText = today.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + today.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+
+            const motoboyDeliveries = deliveries.filter(d => 
+                d.motoboy === motoboyName && 
+                (activeStoreFilter === 'all' || d.store === activeStoreFilter)
+            ).sort((a, b) => a.id - b.id); 
+
+            motoboyDeliveries.forEach(delivery => {
+                reportContent += `
+                    <li class="print-list-item">
+                        <span>Pedido: ${delivery.orderNumber} (${delivery.store})</span>
+                        <span>R$ ${parseFloat(delivery.fee).toFixed(2).replace('.', ',')}</span>
+                    </li>
+                `;
+                totalFee += parseFloat(delivery.fee);
+            });
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Relatório de Entregas - ${motoboyName}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+                        .print-area {
+                            padding: 20px;
+                            box-sizing: border-box;
+                        }
+                        .print-header {
+                            text-align: center;
+                            margin-bottom: 20px;
+                        }
+                        .print-list {
+                            list-style: none;
+                            padding: 0;
+                            margin: 0;
+                        }
+                        .print-list-item {
+                            display: flex;
+                            justify-content: space-between;
+                            padding: 5px 0;
+                            border-bottom: 1px dashed #ccc;
+                            font-size: 14px;
+                        }
+                        .print-list-item:last-child {
+                            border-bottom: none;
+                        }
+                        .print-total {
+                            text-align: right;
+                            margin-top: 20px;
+                            font-size: 16px;
+                            font-weight: bold;
+                            padding-top: 10px;
+                            border-top: 2px solid #000;
+                        }
+                        .print-signature {
+                            margin-top: 80px;
+                            text-align: center;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="print-area">
+                        <h2 class="print-header">Relatório de Entregas</h2>
+                        <h3 class="print-header">${motoboyName}</h3>
+                        <p class="print-header">Data de Impressão: ${currentDateTimeText}</p>
+                        ${activeStoreFilter !== 'all' ? `<p class="print-header">Loja: ${activeStoreFilter}</p>` : ''}
+                        <ul class="print-list">
+                            ${reportContent}
+                        </ul>
+                        <div class="print-total">
+                            Total de Taxas: R$ ${totalFee.toFixed(2).replace('.', ',')}
+                        </div>
+                        <div class="print-signature">
+                            <p>_________________________________________</p>
+                            <p>Assinatura do Motoboy</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close(); 
+            printWindow.print(); 
+        }
+
+        // Função para gerar e imprimir um relatório de totais por motoboy e loja
+        function printMotoboyTotalsReport(motoboyName) {
+            let ciaDoChoppOrders = 0;
+            let ciaDoChoppFees = 0;
+            let pizzariaOrders = 0;
+            let pizzariaFees = 0;
+            let adegaOrders = 0; 
+            let adegaFees = 0;   
+            let grandTotalOrders = 0;
+            let grandTotalFees = 0;
+
+            const today = new Date();
+            const currentDateTimeText = today.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + today.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+
+            const motoboyDeliveries = deliveries.filter(d => d.motoboy === motoboyName);
+
+            motoboyDeliveries.forEach(delivery => {
+                const fee = parseFloat(delivery.fee);
+                if (delivery.store === "Cia do Chopp") {
+                    ciaDoChoppOrders++;
+                    ciaDoChoppFees += fee;
+                } else if (delivery.store === "Pizzaria") {
+                    pizzariaOrders++;
+                    pizzariaFees += fee;
+                } else if (delivery.store === "Adega") { 
+                    adegaOrders++;
+                    adegaFees += fee;
+                }
+                grandTotalOrders++;
+                grandTotalFees += fee;
+            });
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Relatório de Totais - ${motoboyName}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+                        .print-area {
+                            padding: 20px;
+                            box-sizing: border-box;
+                        }
+                        .print-header {
+                            text-align: center;
+                            margin-bottom: 20px;
+                        }
+                        .summary-section {
+                            margin-bottom: 15px;
+                            border: 1px solid #eee;
+                            padding: 10px;
+                            border-radius: 5px;
+                        }
+                        .summary-section h4 {
+                            margin-top: 0;
+                            margin-bottom: 10px;
+                            color: #333;
+                        }
+                        .summary-item {
+                            display: flex;
+                            justify-content: space-between;
+                            padding: 3px 0;
+                            font-size: 14px;
+                        }
+                        .grand-total {
+                            text-align: right;
+                            margin-top: 20px;
+                            font-size: 16px;
+                            font-weight: bold;
+                            padding-top: 10px;
+                            border-top: 2px solid #000;
+                        }
+                        .print-signature {
+                            margin-top: 80px;
+                            text-align: center;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="print-area">
+                        <h2 class="print-header">Relatório de Totais por Loja</h2>
+                        <h3 class="print-header">Motoboy: ${motoboyName}</h3>
+                        <p class="print-header">Data de Impressão: ${currentDateTimeText}</p>
+
+                        <div class="summary-section">
+                            <h4>Cia do Chopp</h4>
+                            <div class="summary-item">
+                                <span>Total de Pedidos:</span>
+                                <span>${ciaDoChoppOrders}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span>Total de Taxas:</span>
+                                <span>R$ ${ciaDoChoppFees.toFixed(2).replace('.', ',')}</span>
+                            </div>
+                        </div>
+
+                        <div class="summary-section">
+                            <h4>Pizzaria</h4>
+                            <div class="summary-item">
+                                <span>Total de Pedidos:</span>
+                                <span>${pizzariaOrders}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span>Total de Taxas:</span>
+                                <span>R$ ${pizzariaFees.toFixed(2).replace('.', ',')}</span>
+                            </div>
+                        </div>
+
+                        <div class="summary-section">
+                            <h4>Adega</h4>
+                            <div class="summary-item">
+                                <span>Total de Pedidos:</span>
+                                <span>${adegaOrders}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span>Total de Taxas:</span>
+                                <span>R$ ${adegaFees.toFixed(2).replace('.', ',')}</span>
+                            </div>
+                        </div>
+
+                        <div class="grand-total">
+                            <div class="summary-item">
+                                <span>Total Geral de Pedidos:</span>
+                                <span>${grandTotalOrders}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span>Total Geral de Taxas:</span>
+                                <span>R$ ${grandTotalFees.toFixed(2).replace('.', ',')}</span>
+                            </div>
+                        </div>
+
+                        <div class="print-signature">
+                            <p>_________________________________________</p>
+                            <p>Assinatura do Motoboy</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            printWindow.print();
+        }
+        
+        // Função para gerar e imprimir um relatório completo de todas as entregas (ou filtradas)
+        function performPrintAll(dataToPrint, dateRangeText, storeFilter) {
+            const motoboys = registeredMotoboys.map(m => m.name).sort(); 
+            let overallTotal = 0; 
+            const summary = {}; 
+
+            const ciaDoChoppDeliveries = dataToPrint.filter(d => d.store === "Cia do Chopp");
+            const pizzariaDeliveries = dataToPrint.filter(d => d.store === "Pizzaria");
+            const adegaDeliveries = dataToPrint.filter(d => d.store === "Adega"); 
+
+            function generateStoreTableHtml(storeName, deliveriesForStore) {
+                if (deliveriesForStore.length === 0) return ''; 
+
+                let tableHtml = `
+                    <h3 class="summary-table-header">${storeName}</h3>
+                    <table class="print-table" style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                        <thead>
+                            <tr>
+                                <th class="date-column-print">Data e Hora</th>
+                `;
+                motoboys.forEach(motoboy => {
+                    tableHtml += `<th class="motoboy-column-print">${motoboy}</th>`;
+                });
+                tableHtml += `
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                const deliveriesByDateForStore = deliveriesForStore.reduce((acc, delivery) => {
+                    if (!acc[delivery.date]) {
+                        acc[delivery.date] = {};
+                    }
+                    if (!acc[delivery.date][delivery.motoboy]) {
+                        acc[delivery.date][delivery.motoboy] = [];
+                    }
+                    acc[delivery.date][delivery.motoboy].push(delivery);
+                    return acc;
+                }, {});
+
+                const sortedDatesForStore = Object.keys(deliveriesByDateForStore).sort((a, b) => {
+                    const partsA = a.split(' ');
+                    const datePartA = partsA[1]; 
+                    const timePartA = partsA[2]; 
+                    const [dayA, monthA, yearA] = datePartA.split('/').map(Number);
+                    const [hoursA, minutesA] = timePartA ? timePartA.split(':').map(Number) : [0,0];
+                    const dateObjA = new Date(yearA, monthA - 1, dayA, hoursA, minutesA);
+
+                    const partsB = b.split(' ');
+                    const datePartB = partsB[1]; 
+                    const timePartB = partsB[2]; 
+                    const [dayB, monthB, yearB] = datePartB.split('/').map(Number);
+                    const [hoursB, minutesB] = timePartB ? timePartB.split(':').map(Number) : [0,0];
+                    const dateObjB = new Date(yearB, monthB - 1, dayB, hoursB, minutesB);
+                    
+                    return dateObjA - dateObjB; 
+                });
+
+                sortedDatesForStore.forEach(date => {
+                    tableHtml += '<tr>';
+                    tableHtml += `<td>${date}</td>`;
+
+                    motoboys.forEach(motoboy => {
+                        const cell = document.createElement('td');
+                        const motoboyDeliveries = (deliveriesByDateForStore[date] && deliveriesByDateForStore[date][motoboy]) ? 
+                                                    deliveriesByDateForStore[date][motoboy].sort((a,b) => a.id - b.id) : []; 
+                        let dailyMotoboyTotal = 0;
+
+                        motoboyDeliveries.forEach(delivery => {
+                            cell.innerHTML += `
+                                <div class="delivery-item">
+                                    <span class="delivery-order">Pedido: ${delivery.orderNumber} (${delivery.store})</span>
+                                    <span class="delivery-fee">R$ ${parseFloat(delivery.fee).toFixed(2).replace('.', ',')}</span>
+                                </div>
+                            `;
+                            dailyMotoboyTotal += parseFloat(delivery.fee);
+                        });
+
+                        if (motoboyDeliveries.length > 0) {
+                            const totalRow = document.createElement('div');
+                            totalRow.classList.add('total-row');
+                            totalRow.textContent = `Total: R$ ${dailyMotoboyTotal.toFixed(2).replace('.', ',')}`;
+                            cell.appendChild(totalRow);
+                        }
+                        tableHtml += cell.outerHTML;
+                    });
+                    tableHtml += '</tr>';
+                });
+                tableHtml += '</tbody></table>';
+                return tableHtml;
+            }
+
+            const ciaDoChoppTableHtml = generateStoreTableHtml("Cia do Chopp", ciaDoChoppDeliveries);
+            const pizzariaTableHtml = generateStoreTableHtml("Pizzaria", pizzariaDeliveries);
+            const adegaTableHtml = generateStoreTableHtml("Adega", adegaDeliveries); 
+
+            dataToPrint.forEach(delivery => {
+                overallTotal += parseFloat(delivery.fee);
+                if (!summary[delivery.motoboy]) {
+                    summary[delivery.motoboy] = { orders: 0, totalFee: 0 };
+                }
+                summary[delivery.motoboy].orders++;
+                summary[delivery.motoboy].totalFee += parseFloat(delivery.fee);
+            });
+
+            let summaryTableHtml = `
+                <h3 class="summary-table-header">Resumo por Entregador (Total Geral)</h3>
+                <table class="print-table" style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                    <thead>
+                        <tr>
+                            <th style="border: 1px solid #000; padding: 8px; text-align: left;">Motoboy</th>
+                            <th style="border: 1px solid #000; padding: 8px; text-align: right;">Total de Pedidos</th>
+                            <th style="border: 1px solid #000; padding: 8px; text-align: right;">Total de Taxas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            for (const motoboy of motoboys) { 
+                const data = summary[motoboy] || { orders: 0, totalFee: 0 };
+                summaryTableHtml += `
+                        <tr>
+                            <td>${motoboy}</td>
+                            <td style="text-align: right;">${data.orders}</td>
+                            <td style="text-align: right;">R$ ${data.totalFee.toFixed(2).replace('.', ',')}</td>
+                        </tr>
+                `;
+            }
+            summaryTableHtml += `
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="2" style="border: 1px solid #000; padding: 8px; text-align: right; font-weight: bold;">Total Geral:</td>
+                            <td style="text-align: right; font-weight: bold;">R$ ${overallTotal.toFixed(2).replace('.', ',')}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            `;
+
+            const today = new Date();
+            const currentDateTimeText = today.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + today.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Relatório Completo de Entregas</title>
+                    <style>
+                        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; }
+                        .print-area {
+                            width: 100%;
+                            padding: 0;
+                            margin: 0;
+                            box-sizing: border-box;
+                        }
+                        table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            table-layout: fixed; 
+                        }
+                        th, td {
+                            border: 1px solid #000;
+                            padding: 8px;
+                            text-align: left;
+                            vertical-align: top;
+                            word-wrap: break-word; 
+                        }
+                        th {
+                            background-color: #f2f2f2;
+                            font-weight: 600;
+                        }
+                        tr:nth-child(even) {
+                            background-color: #f9f9f9;
+                        }
+                        .delivery-item {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            margin-bottom: 4px;
+                            border-bottom: 1px dotted #ccc;
+                            padding-bottom: 4px;
+                        }
+                        .delivery-item:last-of-type {
+                            border-bottom: none;
+                        }
+                        .delivery-order {
+                            flex: 2;
+                            font-size: 12px; 
+                        }
+                        .delivery-fee {
+                            flex: 1;
+                            text-align: right;
+                            font-weight: bold;
+                            font-size: 12px; 
+                        }
+                        .total-row {
+                            font-weight: bold;
+                            background-color: #fffde7;
+                            border-top: 1px solid #ccc;
+                            margin-top: 5px;
+                            padding-top: 5px;
+                            text-align: right;
+                            font-size: 13px;
+                        }
+                        h2 {
+                            text-align: center;
+                            margin-bottom: 20px;
+                            color: #2c3e50;
+                        }
+                        .print-header-info {
+                            text-align: center;
+                            margin-bottom: 20px;
+                        }
+                        .print-date {
+                            text-align: right;
+                            margin-top: 30px;
+                            font-size: 12px;
+                        }
+                        .summary-table-header {
+                            text-align: center;
+                            margin-top: 30px;
+                            margin-bottom: 15px;
+                        }
+                        .date-column-print { width: 10%; } 
+                        .motoboy-column-print { width: 11%; } 
+                    </style>
+                </head>
+                <body>
+                    <div class="print-area">
+                        <h2 class="print-header-info">Relatório Completo de Entregas</h2>
+                        <h3 class="print-header-info">${dateRangeText}</h3>
+                        ${storeFilter !== 'all' ? `<h3 class="print-header-info">Loja: ${storeFilter}</h3>` : ''}
+                        
+                        ${ciaDoChoppTableHtml}
+                        ${pizzariaTableHtml}
+                        ${adegaTableHtml}
+
+                        ${summaryTableHtml}
+                        <div class="print-date">
+                            <p>Emitido em: ${currentDateTimeText}</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        // Função para exportar os dados para um arquivo JSON (operando em memória)
+        function exportDeliveriesToBlob() {
+            const dataToExport = {
+                deliveries: deliveries,
+                registeredMotoboys: registeredMotoboys
+            };
+
+            if (dataToExport.deliveries.length === 0 && dataToExport.registeredMotoboys.length === 0) {
+                showCustomMessageBox('Não há dados para exportar.', 'alert');
+                return null;
+            }
+
+            const dataStr = JSON.stringify(dataToExport, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const date = new Date();
+            const fileName = `deliveries_backup_${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}.json`;
+            return { blob, fileName };
+        }
+
+        // Função para acionar o download do arquivo de backup
+        function downloadBackup() {
+            const exportedData = exportDeliveriesToBlob();
+            if (exportedData) {
+                const url = URL.createObjectURL(exportedData.blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = exportedData.fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showSuccessMessage('Arquivo de backup baixado com sucesso para sua pasta de downloads: ' + exportedData.fileName); 
+            }
+        }
+
+        // Função para importar dados de um arquivo JSON (e salvar no Firestore)
+        function importDeliveries(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            if (file.type !== 'application/json') {
+                showCustomMessageBox('Por favor, selecione um arquivo JSON válido (.json).', 'alert');
+                document.getElementById('importFileInput').value = ''; 
+                return;
+            }
+
+            const reader = new FileReader(); 
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result); 
+                    
+                    const isValidImport = (
+                        (Array.isArray(importedData.deliveries) && importedData.deliveries.every(item => 
+                            item.date && item.motoboy && item.orderNumber !== undefined && item.fee !== undefined)) &&
+                        (Array.isArray(importedData.registeredMotoboys) && importedData.registeredMotoboys.every(item =>
+                            item.id && item.name && item.whatsapp !== undefined))
+                    );
+
+                    if (isValidImport) {
+                        showCustomMessageBox("Deseja substituir os dados atuais ou adicionar os novos dados aos existentes?\n\nConfirmar para SUBSTITUIR (apaga os dados atuais)\nCancelar para ADICIONAR (mantém os dados atuais e insere os novos)", 'confirm', async (result) => {
+                            if (!userId) {
+                                showCustomMessageBox("Você precisa estar logado para importar dados.", 'alert');
+                                return;
+                            }
+
+                            try {
+                                const deliveriesColRef = window.collection(db, `artifacts/${appId}/users/${userId}/deliveries`);
+                                const motoboysColRef = window.collection(db, `artifacts/${appId}/users/${userId}/motoboys`);
+                                
+                                if (result) {
+                                    // Substituir: apaga todos os documentos existentes no Firestore
+                                    const existingDeliveries = await window.getDocs(deliveriesColRef);
+                                    const existingMotoboys = await window.getDocs(motoboysColRef);
+                                    
+                                    const batchDelete = window.writeBatch(db); // Usa window.writeBatch(db)
+                                    existingDeliveries.forEach(doc => batchDelete.delete(doc.ref));
+                                    existingMotoboys.forEach(doc => batchDelete.delete(doc.ref));
+                                    await batchDelete.commit();
+                                    showSuccessMessage('Dados atuais apagados do Firestore.');
+                                }
+
+                                // Importar entregas
+                                const batchDeliveries = window.writeBatch(db); // Usa window.writeBatch(db)
+                                importedData.deliveries.forEach(delivery => {
+                                    if (!delivery.store) {
+                                        delivery.store = "Cia do Chopp"; 
+                                    }
+                                    if (delivery.date && delivery.date.split(' ').length <= 2) {
+                                        const [datePart, timePart] = delivery.date.split(' ');
+                                        const [day, month, year] = datePart.split('/').map(Number);
+                                        const [hours, minutes] = timePart ? timePart.split(':').map(Number) : [0, 0];
+                                        const tempDate = new Date(year, month - 1, day, hours, minutes);
+                                        delivery.date = tempDate.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + tempDate.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+                                    }
+                                    // Firestore vai gerar um novo ID para cada documento adicionado
+                                    batchDeliveries.set(doc(deliveriesColRef), {
+                                        date: delivery.date,
+                                        motoboy: delivery.motoboy,
+                                        orderNumber: delivery.orderNumber,
+                                        fee: parseFloat(delivery.fee).toFixed(2),
+                                        store: delivery.store
+                                    });
+                                });
+                                await batchDeliveries.commit();
+
+                                // Importar motoboys
+                                const batchMotoboys = window.writeBatch(db); // Usa window.writeBatch(db)
+                                for (const motoboy of importedData.registeredMotoboys) {
+                                    // Verifica se o motoboy já existe para evitar duplicatas ao adicionar
+                                    const q = query(motoboysColRef, where("name", "==", motoboy.name));
+                                    const existingMotoboyDocs = await getDocs(q);
+                                    if (existingMotoboyDocs.empty) {
+                                        batchMotoboys.set(doc(motoboysColRef), {
+                                            name: motoboy.name,
+                                            whatsapp: motoboy.whatsapp
+                                        });
+                                    }
+                                }
+                                await batchMotoboys.commit();
+
+                                showSuccessMessage('Dados importados com sucesso para o Firebase!');
+                            } catch (error) {
+                                console.error('Erro ao importar dados para o Firebase:', error);
+                                showCustomMessageBox('Erro ao importar dados. Verifique o console para detalhes.', 'alert');
+                            }
+                        });
+                    } else {
+                        showCustomMessageBox('Arquivo JSON inválido ou formato de dados incorreto.', 'alert');
+                    }
+                } catch (error) {
+                    console.error('Erro ao ler ou parsear o arquivo:', error);
+                    showCustomMessageBox('Erro ao ler o arquivo. Certifique-se de que é um arquivo JSON válido e não está corrompido.', 'alert'); 
+                } finally {
+                    document.getElementById('importFileInput').value = ''; 
+                }
+            };
+            reader.onerror = function() {
+                showCustomMessageBox('Erro ao carregar o arquivo.', 'alert');
+                document.getElementById('importFileInput').value = '';
+            };
+            reader.readAsText(file); 
+        }
+
+        // Função para realizar a busca de pedidos no Firestore
+        async function performSearch() {
+            const searchTerm = document.getElementById('searchOrderInput').value.trim();
+            const searchResultsDiv = document.getElementById('searchResults');
+            searchResultsDiv.style.display = 'none'; 
+            searchResultsDiv.classList.remove('not-found'); 
+            searchResultsDiv.innerHTML = ''; 
+
+            clearAllHighlights();
+
+            if (!searchTerm) {
+                searchResultsDiv.textContent = 'Por favor, digite um número de pedido para pesquisar.';
+                searchResultsDiv.classList.add('not-found');
+                searchResultsDiv.style.display = 'block';
+                return;
+            }
+            
+            if (!userId) {
+                showCustomMessageBox("Você precisa estar logado para pesquisar pedidos.", 'alert');
+                return;
+            }
+
+            try {
+                const deliveriesColRef = collection(db, `artifacts/${appId}/users/${userId}/deliveries`);
+                const q = query(deliveriesColRef, where("orderNumber", "==", parseInt(searchTerm))); // Assume orderNumber é um número
+                const querySnapshot = await getDocs(q);
+
+                const foundDeliveries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                if (foundDeliveries.length > 0) {
+                    let resultHtml = `Pedido ${searchTerm} encontrado:<br>`;
+                    foundDeliveries.forEach(d => {
+                        resultHtml += `- ${d.motoboy} em ${d.date} na loja ${d.store} (R$ ${parseFloat(d.fee).toFixed(2).replace('.', ',')}) `;
+                        const whatsappNumber = WHATSAPP_NUMBERS[d.motoboy]; 
+                        if (whatsappNumber) {
+                            resultHtml += `<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/1200px-WhatsApp.svg.png" class="whatsapp-icon" alt="WhatsApp" data-order="${d.orderNumber}" data-motoboy="${d.motoboy}" data-whatsapp-number="${whatsappNumber}">`;
+                        }
+                        resultHtml += `<br>`;
+
+                        const deliveryItemElement = document.querySelector(`.delivery-item[data-id="${d.id}"]`);
+                        if (deliveryItemElement) {
+                            deliveryItemElement.classList.add('highlighted-delivery');
+                            deliveryItemElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    });
+                    
+                    searchResultsDiv.innerHTML = resultHtml;
+                    searchResultsDiv.style.display = 'block';
+
+                    searchResultsDiv.querySelectorAll('.whatsapp-icon').forEach(icon => {
+                        icon.addEventListener('click', function() {
+                            const order = this.getAttribute('data-order');
+                            const motoboy = this.getAttribute('data-motoboy');
+                            const number = this.getAttribute('data-whatsapp-number');
+                            
+                            if (number) {
+                                const message = encodeURIComponent(`Olá ${motoboy}, tudo bem? Gostaria de saber o status de entrega do pedido: ${order}.`);
+                                const whatsappUrl = `https://wa.me/${number}?text=${message}`;
+                                window.open(whatsappUrl, '_blank'); 
+                            }
+                        });
+                    });
+
+                } else {
+                    searchResultsDiv.textContent = `Pedido "${searchTerm}" não encontrado.`;
+                    searchResultsDiv.classList.add('not-found');
+                    searchResultsDiv.style.display = 'block';
+                }
+            } catch (error) {
+                console.error("Erro ao pesquisar pedido:", error);
+                showCustomMessageBox("Erro ao pesquisar pedido. Tente novamente.", 'alert');
+            }
+        }
+
+        // Função para alternar a visibilidade de uma seção colapsável
+        function toggleCollapsibleSection(headerElement) {
+            const targetId = headerElement.getAttribute('data-target');
+            const contentElement = document.getElementById(targetId);
+            const iconElement = headerElement.querySelector('.collapse-icon');
+
+            if (contentElement && iconElement) {
+                const isCollapsed = contentElement.classList.contains('collapsed');
+                if (isCollapsed) {
+                    contentElement.style.maxHeight = contentElement.scrollHeight + "px";
+                    contentElement.classList.remove('collapsed');
+                } else {
+                    contentElement.style.maxHeight = contentElement.scrollHeight + "px";
+                    void contentElement.offsetWidth; 
+                    contentElement.classList.add('collapsed');
+                    contentElement.style.maxHeight = '0'; 
+                }
+                iconElement.classList.toggle('rotated');
+            }
+        }
+
+        // Garante que o script seja executado apenas quando o DOM estiver completamente carregado
+        document.addEventListener('DOMContentLoaded', function() {
+            // Atribui as variáveis globais do Firebase após o carregamento do módulo
+            app = window.firebaseApp;
+            db = window.firebaseDb;
+            auth = window.firebaseAuth;
+
+            // Referências a elementos do DOM para interação
+            const authSection = document.getElementById('authSection');
+            const loginForm = document.getElementById('loginForm');
+            const registerForm = document.getElementById('registerForm');
+            const mainAppSection = document.getElementById('mainAppSection');
+            const loginEmailInput = document.getElementById('loginEmail');
+            const loginPasswordInput = document.getElementById('loginPassword');
+            const loginBtn = document.getElementById('loginBtn');
+            const showRegisterFormBtn = document.getElementById('showRegisterForm');
+            const registerEmailInput = document.getElementById('registerEmail');
+            const registerPasswordInput = document.getElementById('registerPassword');
+            const registerBtn = document.getElementById('registerBtn');
+            const showLoginFormBtn = document.getElementById('showLoginForm');
+            const logoutBtn = document.getElementById('logoutBtn');
+            const welcomeUser = document.getElementById('welcomeUser');
+
+            const orderNumberInput = document.getElementById('orderNumber');
+            const feeSection = document.getElementById('feeSection');
+            const selectedMotoboyName = document.getElementById('selectedMotoboyName');
+            const customFeeContainer = document.getElementById('customFeeContainer');
+            const customFeeInput = document.getElementById('customFeeInput');
+            const confirmCustomFeeBtn = document.getElementById('confirmCustomFeeBtn');
+            const skipFeeOption = document.getElementById('skipFeeOption');
+            const importFileInput = document.getElementById('importFileInput');
+
+            const searchOrderInput = document.getElementById('searchOrderInput');
+            const searchOrderBtn = document.getElementById('searchOrderBtn');
+            const clearSearchBtn = document.getElementById('clearSearchBtn');
+
+            const toggleLayoutBtn = document.getElementById('toggleLayoutBtn');
+            const bodyElement = document.body;
+
+            const storeRadios = document.querySelectorAll('input[name="store"]');
+            const storeFilterSelect = document.getElementById('storeFilter');
+
+            // Novos elementos para o cadastro de motoboys
+            const registerMotoboyBtnFab = document.getElementById('registerMotoboyBtnFab'); 
+            const motoboyRegistrationModal = document.getElementById('motoboyRegistrationModal');
+            const motoboyNameInput = document.getElementById('motoboyNameInput');
+            const motoboyWhatsappInput = document.getElementById('motoboyWhatsappInput');
+            const saveMotoboyBtn = document.getElementById('saveMotoboyBtn');
+            const cancelMotoboyRegistrationBtn = document.getElementById('cancelMotoboyRegistrationBtn');
+
+            // FAB menu elements
+            const fabToggleBtn = document.getElementById('fabToggleBtn');
+            const fabActions = document.getElementById('fabActions');
+            const clearAllBtn = document.getElementById('clearAllBtn');
+            const exportDataBtn = document.getElementById('exportDataBtn');
+            const importDataBtn = document.getElementById('importDataBtn');
+            const printAllBtn = document.getElementById('printAllBtn');
+
+            // Collapsible section headers
+            const collapsibleHeaders = document.querySelectorAll('.collapsible-header');
+            collapsibleHeaders.forEach(header => {
+                header.addEventListener('click', () => toggleCollapsibleSection(header));
+            });
+
+            // Lógica para alternar entre layouts (padrão, escuro, minimalista)
+            const layouts = ['', 'layout-dark', 'layout-minimal']; 
+            let currentLayoutIndex = parseInt(localStorage.getItem('currentLayoutIndex') || '0');
+
+            function applyLayout(index) {
+                bodyElement.className = ''; 
+                if (layouts[index]) {
+                    bodyElement.classList.add(layouts[index]);
+                }
+                localStorage.setItem('currentLayoutIndex', index.toString());
+            }
+
+            applyLayout(currentLayoutIndex); 
+
+            toggleLayoutBtn.addEventListener('click', function() {
+                currentLayoutIndex = (currentLayoutIndex + 1) % layouts.length;
+                applyLayout(currentLayoutIndex);
+            });
+
+            storeRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    currentStore = this.value;
+                });
+            });
+
+            if (storeFilterSelect) {
+                storeFilterSelect.addEventListener('change', function() {
+                    updateTable(this.value); 
+                });
+            }
+            
+            document.querySelectorAll('.fee-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    document.querySelectorAll('.fee-option').forEach(opt => opt.classList.remove('selected'));
+                    this.classList.add('selected');
+                    customFeeContainer.style.display = 'none';
+                    customFeeInput.value = '';
+                    
+                    if (this.id === 'customFeeOption') {
+                        currentFee = null; 
+                        customFeeContainer.style.display = 'block'; 
+                    } else if (this.id === 'skipFeeOption') {
+                        currentFee = 0; 
+                        // Chama addDelivery diretamente
+                        const orderNumber = orderNumberInput.value.trim();
+                        if (!orderNumber || !currentMotoboy || currentFee === null || !currentStore) {
+                            displayError('deliveryFeeError', 'Por favor, preencha todos os campos obrigatórios.');
+                            return;
+                        }
+                        const newDelivery = {
+                            date: new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
+                            motoboy: currentMotoboy,
+                            orderNumber: parseInt(orderNumber), // Garante que é um número
+                            fee: parseFloat(currentFee).toFixed(2),
+                            store: currentStore 
+                        };
+                        addDelivery(newDelivery);
+                    }
+                    else {
+                        currentFee = parseFloat(this.getAttribute('data-fee')); 
+                        // Chama addDelivery diretamente
+                        const orderNumber = orderNumberInput.value.trim();
+                        if (!orderNumber || !currentMotoboy || currentFee === null || !currentStore) {
+                            displayError('deliveryFeeError', 'Por favor, preencha todos os campos obrigatórios.');
+                            return;
+                        }
+                        const newDelivery = {
+                            date: new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
+                            motoboy: currentMotoboy,
+                            orderNumber: parseInt(orderNumber), // Garante que é um número
+                            fee: parseFloat(currentFee).toFixed(2),
+                            store: currentStore 
+                        };
+                        addDelivery(newDelivery);
+                    }
+                });
+            });
+            
+            confirmCustomFeeBtn.addEventListener('click', function() {
+                const fee = parseFloat(customFeeInput.value);
+                if (!isNaN(fee) && fee >= 0) {
+                    currentFee = fee;
+                    // Chama addDelivery diretamente
+                    const orderNumber = orderNumberInput.value.trim();
+                    if (!orderNumber || !currentMotoboy || currentFee === null || !currentStore) {
+                        displayError('deliveryFeeError', 'Por favor, preencha todos os campos obrigatórios.');
+                        return;
+                    }
+                    const newDelivery = {
+                        date: new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
+                        motoboy: currentMotoboy,
+                        orderNumber: parseInt(orderNumber), // Garante que é um número
+                        fee: parseFloat(currentFee).toFixed(2),
+                        store: currentStore 
+                    };
+                    addDelivery(newDelivery);
+                } else {
+                    displayError('deliveryFeeError', 'Por favor, insira um valor de taxa válido.');
+                }
+            });
+            
+            clearAllBtn.addEventListener('click', function() {
+                showCustomMessageBox('Tem certeza que deseja limpar todo o registro de entregas e entregadores? Esta ação é irreversível.', 'confirm', async (result) => {
+                    if (result) {
+                        if (!userId) {
+                            showCustomMessageBox("Você precisa estar logado para limpar os dados.", 'alert');
+                            return;
+                        }
+                        try {
+                            const deliveriesColRef = collection(db, `artifacts/${appId}/users/${userId}/deliveries`);
+                            const motoboysColRef = collection(db, `artifacts/${appId}/users/${userId}/motoboys`);
+                            
+                            const existingDeliveries = await getDocs(deliveriesColRef);
+                            const existingMotoboys = await getDocs(motoboysColRef);
+                            
+                            const batchDelete = window.writeBatch(db); // Usa window.writeBatch(db)
+                            existingDeliveries.forEach(doc => batchDelete.delete(doc.ref));
+                            existingMotoboys.forEach(doc => batchDelete.delete(doc.ref));
+                            await batchDelete.commit();
+
+                            showSuccessMessage('Registro de entregas e entregadores limpo com sucesso!');
+                            resetForm(); 
+                            // Listeners do Firestore já vão atualizar as variáveis e a UI
+                        } catch (error) {
+                            console.error("Erro ao limpar dados:", error);
+                            showCustomMessageBox("Erro ao limpar dados. Tente novamente.", 'alert');
+                        }
+                    }
+                });
+            });
+            
+            printAllBtn.addEventListener('click', function() {
+                document.getElementById('printDateModal').style.display = 'flex';
+            });
+
+            document.getElementById('cancelPrintDateBtn').addEventListener('click', function() {
+                document.getElementById('printDateModal').style.display = 'none';
+                document.getElementById('startDateInput').value = '';
+                document.getElementById('endDateInput').value = '';
+            });
+
+            document.getElementById('confirmPrintDateBtn').addEventListener('click', function() {
+                const startDateStr = document.getElementById('startDateInput').value;
+                const endDateStr = document.getElementById('endDateInput').value;
+                const activeStoreFilter = storeFilterSelect.value; 
+
+                let deliveriesToPrint = deliveries;
+                let dateRangeText = "Todo o Período"; 
+
+                if (startDateStr || endDateStr) {
+                    deliveriesToPrint = deliveries.filter(delivery => {
+                        const parts = delivery.date.split(' ');
+                        const datePart = parts[1]; 
+                        const timePart = parts[2]; 
+                        
+                        const [day, month, year] = datePart.split('/').map(Number);
+                        const [hours, minutes] = timePart ? timePart.split(':').map(Number) : [0, 0]; 
+                        const deliveryDate = new Date(year, month - 1, day, hours, minutes);
+
+                        const start = startDateStr ? new Date(startDateStr + 'T00:00:00') : null;
+                        const end = endDateStr ? new Date(endDateStr + 'T23:59:59') : null;
+
+                        return (!start || deliveryDate >= start) && (!end || deliveryDate <= end);
+                    });
+
+                    if (startDateStr && endDateStr) {
+                        dateRangeText = `Período: ${startDateStr.split('-').reverse().join('/')} a ${endDateStr.split('-').reverse().join('/')}`;
+                    } else if (startDateStr) {
+                        dateRangeText = `Data: ${startDateStr.split('-').reverse().join('/')}`;
+                    }
+                }
+
+                const filteredDeliveriesForPrint = deliveriesToPrint.filter(d => activeStoreFilter === 'all' || (d.store && d.store === activeStoreFilter));
+                performPrintAll(filteredDeliveriesForPrint, dateRangeText, activeStoreFilter); 
+                document.getElementById('printDateModal').style.display = 'none'; 
+                document.getElementById('startDateInput').value = ''; 
+                document.getElementById('endDateInput').value = '';
+            });
+
+            document.getElementById('printAllWithoutDateBtn').addEventListener('click', function() {
+                const activeStoreFilter = storeFilterSelect.value; 
+                const filteredDeliveries = deliveries.filter(d => activeStoreFilter === 'all' || (d.store && d.store === activeStoreFilter));
+                performPrintAll(filteredDeliveries, "Todo o Período", activeStoreFilter); 
+                document.getElementById('printDateModal').style.display = 'none';
+                document.getElementById('startDateInput').value = '';
+                document.getElementById('endDateInput').value = '';
+            });
+
+            exportDataBtn.addEventListener('click', downloadBackup); 
+            importDataBtn.addEventListener('click', () => document.getElementById('importFileInput').click()); 
+            document.getElementById('importFileInput').addEventListener('change', importDeliveries); 
+
+            searchOrderBtn.addEventListener('click', performSearch);
+            document.getElementById('searchOrderInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') { 
+                    performSearch();
+                }
+            });
+
+            clearSearchBtn.addEventListener('click', function() {
+                document.getElementById('searchOrderInput').value = ''; 
+                document.getElementById('searchResults').innerHTML = ''; 
+                document.getElementById('searchResults').style.display = 'none'; 
+                document.getElementById('searchResults').classList.remove('not-found'); 
+                clearAllHighlights(); 
+            });
+
+            // Event listeners para o modal de cadastro de motoboys
+            registerMotoboyBtnFab.addEventListener('click', function() {
+                motoboyRegistrationModal.style.display = 'flex';
+                motoboyNameInput.value = '';
+                motoboyWhatsappInput.value = '';
+                hideAllErrors();
+                renderExistingMotoboysInModal(); 
+            });
+
+            cancelMotoboyRegistrationBtn.addEventListener('click', function() {
+                motoboyRegistrationModal.style.display = 'none';
+            });
+
+            saveMotoboyBtn.addEventListener('click', function() {
+                const name = motoboyNameInput.value.trim().toUpperCase();
+                const whatsapp = motoboyWhatsappInput.value.trim();
+                hideAllErrors();
+
+                if (!name) {
+                    displayError('motoboyNameError', 'Por favor, insira o nome do entregador.');
+                    return;
+                }
+
+                // Verifica se o motoboy já existe antes de adicionar
+                if (registeredMotoboys.some(m => m.name === name)) {
+                    displayError('motoboyNameError', 'Este entregador já está cadastrado.');
+                    return;
+                }
+
+                const newMotoboy = {
+                    name: name,
+                    whatsapp: whatsapp
+                };
+                addMotoboy(newMotoboy);
+            });
+
+            // FAB menu toggle logic
+            fabToggleBtn.addEventListener('click', function() {
+                fabToggleBtn.classList.toggle('open');
+                fabActions.classList.toggle('open');
+            });
+
+            // ====================================================================================
+            // INICIALIZAÇÃO E LISTENERS DE AUTENTICAÇÃO
+            // ====================================================================================
+
+            // Listener de estado de autenticação
+            window.onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    // Usuário logado
+                    userId = user.uid;
+                    window.firebaseUserId = userId; // Atualiza a variável global
+                    welcomeUser.textContent = `Bem-vindo(a), ${user.email}!`;
+                    authSection.style.display = 'none'; // Esconde a seção de autenticação
+                    mainAppSection.style.display = 'block'; // Mostra a seção principal
+                    setupDeliveriesListener(); // Inicia o listener de entregas
+                    setupMotoboysListener(); // Inicia o listener de motoboys
+                } else {
+                    // Usuário deslogado
+                    userId = null;
+                    window.firebaseUserId = null; // Limpa a variável global
+                    welcomeUser.textContent = '';
+                    authSection.style.display = 'flex'; // Mostra a seção de autenticação
+                    loginForm.style.display = 'block'; // Garante que o formulário de login esteja visível
+                    registerForm.style.display = 'none'; // Garante que o formulário de registro esteja oculto
+                    mainAppSection.style.display = 'none'; // Esconde a seção principal
+                    deliveries = []; // Limpa dados em memória
+                    registeredMotoboys = []; // Limpa dados em memória
+                    updateTable(); // Limpa a tabela
+                    renderMotoboyGrid(); // Limpa a grade de motoboys
+                    if (unsubscribeDeliveries) {
+                        unsubscribeDeliveries();
+                        unsubscribeDeliveries = null;
+                    }
+                    if (unsubscribeMotoboys) {
+                        unsubscribeMotoboys();
+                        unsubscribeMotoboys = null;
+                    }
+                    resetForm();
+                    hideAllErrors();
+                }
+            });
+
+            // Event listeners para o formulário de login
+            loginBtn.addEventListener('click', () => {
+                const email = loginEmailInput.value;
+                const password = loginPasswordInput.value;
+                loginUser(email, password);
+            });
+
+            loginPasswordInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    const email = loginEmailInput.value;
+                    const password = loginPasswordInput.value;
+                    loginUser(email, password);
+                }
+            });
+
+            logoutBtn.addEventListener('click', logoutUser);
+
+            // Event listeners para alternar entre login e registro
+            showRegisterFormBtn.addEventListener('click', () => {
+                loginForm.style.display = 'none';
+                registerForm.style.display = 'block';
+                hideAllErrors();
+            });
+
+            showLoginFormBtn.addEventListener('click', () => {
+                loginForm.style.display = 'block';
+                registerForm.style.display = 'none';
+                hideAllErrors();
+            });
+
+            // Event listener para o botão de registro
+            registerBtn.addEventListener('click', () => {
+                const email = registerEmailInput.value;
+                const password = registerPasswordInput.value;
+                registerUser(email, password);
+            });
+
+            registerPasswordInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    const email = registerEmailInput.value;
+                    const password = registerPasswordInput.value;
+                    registerUser(email, password);
+                }
+            });
+
+            // Inicializa o estado dos botões de impressão/exportação (será atualizado pelo listener do Firestore)
+            updatePrintAndExportButtonState();
+        });
+    </script>
+</body>
+</html>
